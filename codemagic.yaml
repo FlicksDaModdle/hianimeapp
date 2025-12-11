@@ -1,6 +1,6 @@
 workflows:
-  build-hianime-webview:
-    name: Build HiAnime Full Screen
+  build-hianime-icon-ready:
+    name: Build HiAnime (Icon Ready)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
@@ -16,62 +16,67 @@ workflows:
     scripts:
       - name: Download & Configure Open Source Wrapper
         script: |
-          echo "🧹 Clearing current directory..."
+          echo "🧹 Clearing directory..."
           rm -rf * rm -rf .git
           
-          echo "⬇️ Cloning Replacement WebView..."
+          echo "⬇️ Cloning Wrapper..."
           git clone https://github.com/thejohncotton/ios-webview.git temp_clone
           mv temp_clone/* .
           rm -rf temp_clone
 
           echo "🔗 Injecting URL..."
-          # Replace the default URL with yours
           find . -name "*.swift" -type f -exec sed -i "" "s|https://apple.com|$WEBVIEW_URL|g" {} +
-          # Just in case, try google.com too
           find . -name "*.swift" -type f -exec sed -i "" "s|https://www.google.com|$WEBVIEW_URL|g" {} +
 
           echo "📱 Renaming App..."
-          # Find the Info.plist file automatically
           INFO_PLIST=$(find . -name "Info.plist" -maxdepth 4 | head -n 1)
-          
           if [ -n "$INFO_PLIST" ]; then
-            echo "Found Info.plist at: $INFO_PLIST"
-            
-            # LOGIC: Try to SET the name. If it fails (because it doesn't exist), ADD it instead.
             /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_NAME" "$INFO_PLIST"
             /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" "$INFO_PLIST"
-            
-            echo "✅ App name updated to $APP_NAME"
-          else
-            echo "⚠️ Info.plist not found, skipping rename."
           fi
 
-          echo "📐 FIX: Make WebView Full Screen..."
-          # 1. Find the main ViewController file
+          echo "📐 FIX: Full Screen..."
           VC_FILE=$(find . -name "ViewController.swift" -type f | head -n 1)
-          
           if [ -n "$VC_FILE" ]; then
-             echo "Found ViewController at $VC_FILE, injecting full-screen code..."
-             
-             # This injects the line 'webView.scrollView.contentInsetAdjustmentBehavior = .never' 
-             # right after 'super.viewDidLoad()' to ignore safe area insets.
              sed -i "" '/super.viewDidLoad()/a\
              webView.scrollView.contentInsetAdjustmentBehavior = .never\
              ' "$VC_FILE"
-             
-             echo "✅ Full screen code injected."
-          else
-             echo "⚠️ Could not find ViewController.swift to inject full-screen code."
+          fi
+
+          echo "🎨 FIX: Creating Icon 'Landing Pad'..."
+          # 1. Ensure the Assets folder exists
+          mkdir -p WebViewApp/Assets.xcassets/AppIcon.appiconset
+          
+          # 2. Create a generic placeholder image (using a 1x1 pixel generic image for structure)
+          # We just need a file to exist so the signing app can replace it.
+          curl -L -o WebViewApp/Assets.xcassets/AppIcon.appiconset/1024.png "https://via.placeholder.com/1024.png/FFFFFF/FFFFFF"
+
+          # 3. Create the configuration file that links the image to iOS
+          cat > WebViewApp/Assets.xcassets/AppIcon.appiconset/Contents.json <<EOF
+          {
+            "images" : [
+              { "size" : "1024x1024", "idiom" : "ios-marketing", "filename" : "1024.png", "scale" : "1x" },
+              { "size" : "60x60", "idiom" : "iphone", "filename" : "1024.png", "scale" : "2x" },
+              { "size" : "60x60", "idiom" : "iphone", "filename" : "1024.png", "scale" : "3x" },
+              { "size" : "76x76", "idiom" : "ipad", "filename" : "1024.png", "scale" : "2x" },
+              { "size" : "83.5x83.5", "idiom" : "ipad", "filename" : "1024.png", "scale" : "2x" }
+            ],
+            "info" : { "version" : 1, "author" : "xcode" }
+          }
+          EOF
+          
+          # 4. CRITICAL: Tell the app "Hey, look in the Assets folder for the icon"
+          # Without this line in Info.plist, the app ignores the images we just downloaded.
+          if [ -n "$INFO_PLIST" ]; then
+             /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$INFO_PLIST" 2>/dev/null
+             /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$INFO_PLIST"
+             echo "✅ Info.plist updated to look for AppIcon"
           fi
 
       - name: Build Unsigned .app
         script: |
-          # Automatically find the project file
           PROJECT_NAME=$(find . -name "*.xcodeproj" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$PROJECT_NAME" .xcodeproj)
-
-          echo "🔨 Building $PROJECT_NAME with scheme $SCHEME_NAME..."
-
           xcodebuild build \
             -project "$PROJECT_NAME" \
             -scheme "$SCHEME_NAME" \
@@ -87,7 +92,7 @@ workflows:
         script: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/
-          zip -r "HiAnime_Unsigned.ipa" Payload
+          zip -r "HiAnime_IconReady.ipa" Payload
 
     artifacts:
-      - HiAnime_Unsigned.ipa
+      - HiAnime_IconReady.ipa
