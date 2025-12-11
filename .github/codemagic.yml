@@ -1,0 +1,38 @@
+workflows:
+  build-unsigned-ipa:
+    name: Build Unsigned IPA
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        XCODE_SCHEME: "YourSchemeName" # <--- REPLACE THIS
+    scripts:
+      - name: Build Unsigned .app
+        script: |
+          # Build the project using xcodebuild
+          # We force signing off with CODE_SIGN_IDENTITY="" and CODE_SIGNING_REQUIRED=NO
+          xcodebuild build \
+            -workspace "ios/YourApp.xcworkspace" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package .app into .ipa
+        script: |
+          # 1. Create the Payload folder required for IPAs
+          mkdir -p Payload
+
+          # 2. Find the .app in the derived data path and copy it to Payload
+          # Note: The path usually ends in Release-iphoneos/YourApp.app
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/
+
+          # 3. Zip the Payload folder into an IPA
+          zip -r "unsigned_app.ipa" Payload
+
+    artifacts:
+      - unsigned_app.ipa
