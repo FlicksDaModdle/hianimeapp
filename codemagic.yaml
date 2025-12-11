@@ -13,28 +13,41 @@ workflows:
         - pattern: 'main'
         - pattern: 'master'
     scripts:
-      - name: Fix Podfile & Code Dependencies
+      - name: Surgical Fix of Podfile & Dependencies
         script: |
-          # FIX 1: Remove the private "gonative-specs" source
+          echo "🛠️ Starting Surgical Fixes..."
+
+          # FIX 1: Remove the private "gonative-specs" source link
           sed -i "" "/gonative-specs/d" Podfile || sed -i "/gonative-specs/d" Podfile
           
-          # FIX 2: Convert SSH links to HTTPS
+          # FIX 2: Convert any SSH links to HTTPS
           sed -i "" "s/git@github.com:/https:\/\/github.com\//g" Podfile || sed -i "s/git@github.com:/https:\/\/github.com\//g" Podfile
           
-          # FIX 4: Remove the private 'MedianIcons' pod requirement
-          # This deletes the line "pod 'MedianIcons'" from the Podfile
+          # FIX 3: DELETE 'MedianIcons' dependency
           sed -i "" "/MedianIcons/d" Podfile || sed -i "/MedianIcons/d" Podfile
 
-          # FIX 5: Remove "import MedianIcons" from all Swift files
-          # This prevents the compiler from crashing because the pod is missing
-          find . -name "*.swift" -type f -exec sed -i "" "/import MedianIcons/d" {} +
+          # FIX 4: DELETE 'GoNativeCore' dependency (The private engine)
+          sed -i "" "/GoNativeCore/d" Podfile || sed -i "/GoNativeCore/d" Podfile
 
-          # Install the remaining valid pods
+          # FIX 5: INJECT 'GoNativeIOS' dependency (The public engine)
+          # We add this to the end of the Podfile to force it to use the open source version
+          echo "pod 'GoNativeIOS', :git => 'https://github.com/gonativeio/gonative-ios.git'" >> Podfile
+
+          # FIX 6: Rename imports in Swift/Obj-C files
+          # The app will try to 'import GoNativeCore', we switch it to 'import GoNativeIOS'
+          find . -name "*.swift" -type f -exec sed -i "" "s/import GoNativeCore/import GoNativeIOS/g" {} +
+          find . -name "*.m" -type f -exec sed -i "" "s/#import <GoNativeCore/#import <GoNativeIOS/g" {} +
+          
+          # FIX 7: Remove 'import MedianIcons' to prevent crashes
+          find . -name "*.swift" -type f -exec sed -i "" "/import MedianIcons/d" {} +
+          
+          echo "✅ Fixes applied. Installing Pods..."
+
+          # Install the pods
           pod install --repo-update
 
       - name: Build Unsigned .app
         script: |
-          # FIX 3: Disable User Script Sandboxing
           xcodebuild build \
             -workspace "HiAnime.xcworkspace" \
             -scheme "$XCODE_SCHEME" \
