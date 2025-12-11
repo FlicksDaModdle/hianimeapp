@@ -17,7 +17,9 @@ workflows:
       - name: Download & Configure Wrapper
         script: |
           echo "🧹 Clearing directory..."
-          rm -rf * rm -rf .git
+          # FIX: These must be separate commands
+          rm -rf .git
+          rm -rf *
           
           echo "⬇️ Cloning Wrapper..."
           git clone https://github.com/thejohncotton/ios-webview.git temp_clone
