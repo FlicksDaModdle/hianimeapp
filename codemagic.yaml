@@ -13,9 +13,16 @@ workflows:
         - pattern: 'main'
         - pattern: 'master'
     scripts:
-      - name: Install CocoaPods
+      - name: Fix Podfile and Install CocoaPods
         script: |
-          # Updates the repo and installs dependencies
+          # 1. Remove the private source line that causes the error
+          # This deletes any line containing "gonative-specs"
+          sed -i "" "/gonative-specs/d" Podfile || sed -i "/gonative-specs/d" Podfile
+          
+          # 2. (Optional) Convert any other SSH links to HTTPS just in case
+          sed -i "" "s/git@github.com:/https:\/\/github.com\//g" Podfile || sed -i "s/git@github.com:/https:\/\/github.com\//g" Podfile
+
+          # 3. Install pods
           pod install --repo-update
 
       - name: Build Unsigned .app
