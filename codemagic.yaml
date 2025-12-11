@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       vars:
-        XCODE_SCHEME: "YourSchemeName" # <--- REPLACE THIS
+        XCODE_SCHEME: "HiAnime" # <--- REPLACE THIS
     scripts:
       - name: Build Unsigned .app
         script: |
