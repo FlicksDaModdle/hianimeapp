@@ -49,8 +49,8 @@ jobs:
 
       - name: build archive
         run: |
-          xcodebuild -scheme "Hianime" \
-          -archivePath $RUNNER_TEMP/hianime.xcarchive \
+          xcodebuild -scheme "HiAnime" \
+          -archivePath $RUNNER_TEMP/hiAnime.xcarchive \
           -sdk iphoneos \
           -configuration Debug \
           -destination generic/platform=iOS \
@@ -68,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app
-          path: ${{ runner.temp }}/build/Hianime.ipa
+          path: ${{ runner.temp }}/build/HiAnime.ipa
           # you can also archive the entire directory
           # path: ${{ runner.temp }}/build
           retention-days: 3
