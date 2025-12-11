@@ -1,6 +1,6 @@
 workflows:
   build-hianime-stable-fix:
-    name: Build HiAnime (Stable Fix)
+    name: Build HiAnime (Compiler Fix)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
@@ -42,7 +42,7 @@ workflows:
           echo "🎬 FIX: Stable Cinema Engine..."
           VC_FILE=$(find . -name "ViewController.swift" -type f | head -n 1)
           
-          # We use 'EOF' (quoted) to prevent the shell from breaking Swift syntax like \(error)
+          # We use 'EOF' (quoted) to prevent the shell from breaking Swift syntax
           cat > "$VC_FILE" <<'EOF'
           import UIKit
           import WebKit
@@ -85,9 +85,10 @@ workflows:
                   ])
                   
                   // 5. LOAD URL
-                  // We use a placeholder string "REPLACE_ME_URL" which we will swap out later
                   if let url = URL(string: "REPLACE_ME_URL") {
-                      var request = URLRequest(url: url)
+                      // FIX: Changed 'var' to 'let' to stop compiler warning
+                      let request = URLRequest(url: url)
+                      
                       // iPad User Agent for Desktop-class video player
                       webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
                       webView.load(request)
@@ -97,12 +98,14 @@ workflows:
               // 6. SAFE AUDIO ACTIVATION
               override func viewDidAppear(_ animated: Bool) {
                   super.viewDidAppear(animated)
-                  DispatchQueue.global(qos: .background).async {
+                  
+                  // FIX: Simplified syntax to prevent "trailing closure" error
+                  DispatchQueue.global().async {
                       do {
                           try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
                           try AVAudioSession.sharedInstance().setActive(true)
                       } catch {
-                          print("Audio Session Failed silently: \(error)")
+                          print("Audio Session Failed silently")
                       }
                   }
               }
@@ -143,7 +146,6 @@ workflows:
           PROJECT_NAME=$(find . -name "*.xcodeproj" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$PROJECT_NAME" .xcodeproj)
           
-          # FIX: We explicitly set the Deployment Target to 15.0 to avoid the "iOS 11.3" error
           xcodebuild build \
             -project "$PROJECT_NAME" \
             -scheme "$SCHEME_NAME" \
