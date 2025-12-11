@@ -5,9 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       vars:
-        # 1. Enter the URL you want the app to open
         WEBVIEW_URL: "https://hianime.to/home" 
-        # 2. Enter the name of the app (Appears on home screen)
         APP_NAME: "HiAnime"
     triggering:
       events:
@@ -18,26 +16,39 @@ workflows:
     scripts:
       - name: Download & Configure Open Source Wrapper
         script: |
-          # 1. Delete the "Locked" Median code from the build folder
-          rm -rf * # 2. Clone a free, open-source WebView template
+          echo "🧹 Clearing current directory..."
+          # FIX: Explicitly remove the hidden .git folder and all files
+          rm -rf .git
+          rm -rf *
+
+          echo "⬇️ Cloning Open Source WebView..."
           git clone https://github.com/kemalenver/WebViewApp.git .
+
+          echo "🔗 Injecting URL..."
+          # We use 'find' to locate the ViewController file wherever it is
+          # This makes the script "crash-proof" even if the folder name changes
+          find . -name "ViewController.swift" -type f -exec sed -i "" "s|https://www.google.com|$WEBVIEW_URL|g" {} +
+
+          echo "📱 Renaming App..."
+          # We use 'find' to locate the Info.plist file
+          INFO_PLIST=$(find . -name "Info.plist" -maxdepth 3 | head -n 1)
           
-          # 3. Inject the HiAnime URL into the source code
-          # This specific repo stores the URL in 'Constants.swift' or 'ViewController.swift'
-          # We use sed to replace the default URL with yours
-          sed -i "" "s|https://www.google.com|$WEBVIEW_URL|g" WebViewApp/ViewController.swift || echo "URL Replace tried"
-          
-          # 4. (Optional) Rename the App Bundle
-          # This is a bit hacky but updates the display name in Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" WebViewApp/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" WebViewApp/Info.plist
+          if [ -n "$INFO_PLIST" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST"
+          else
+            echo "⚠️ Warning: Info.plist not found. App name might be default."
+          fi
 
       - name: Build Unsigned .app
         script: |
-          # Build the new Open Source project
+          # Automatically find the project file since we just cloned it
+          PROJECT_NAME=$(find . -name "*.xcodeproj" -maxdepth 1 | head -n 1)
+          SCHEME_NAME=$(basename "$PROJECT_NAME" .xcodeproj)
+
           xcodebuild build \
-            -project "WebViewApp.xcodeproj" \
-            -scheme "WebViewApp" \
+            -project "$PROJECT_NAME" \
+            -scheme "$SCHEME_NAME" \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
