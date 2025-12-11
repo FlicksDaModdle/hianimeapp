@@ -5,14 +5,30 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       vars:
-        XCODE_SCHEME: "HiAnime" # <--- REPLACE THIS
+        # 1. We set your exact scheme here
+        XCODE_SCHEME: "HiAnime"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+        - pattern: 'master'
     scripts:
+      - name: Install CocoaPods (if needed)
+        script: |
+          # If a Podfile exists, we must install pods or the build will fail.
+          if [ -f "Podfile" ]; then
+            pod install
+          fi
+
       - name: Build Unsigned .app
         script: |
-          # Build the project using xcodebuild
-          # We force signing off with CODE_SIGN_IDENTITY="" and CODE_SIGNING_REQUIRED=NO
+          # 2. Build command
+          # CHECK THIS: If you only have a blue .xcodeproj file and NO white .xcworkspace file,
+          # change "-workspace HiAnime.xcworkspace" to "-project HiAnime.xcodeproj"
+          
           xcodebuild build \
-            -workspace "ios/YourApp.xcworkspace" \
+            -workspace "HiAnime.xcworkspace" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -sdk iphoneos \
@@ -24,15 +40,10 @@ workflows:
 
       - name: Package .app into .ipa
         script: |
-          # 1. Create the Payload folder required for IPAs
           mkdir -p Payload
-
-          # 2. Find the .app in the derived data path and copy it to Payload
-          # Note: The path usually ends in Release-iphoneos/YourApp.app
+          # We look for the app in the build directory
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/
-
-          # 3. Zip the Payload folder into an IPA
-          zip -r "unsigned_app.ipa" Payload
+          zip -r "HiAnime_Unsigned.ipa" Payload
 
     artifacts:
-      - unsigned_app.ipa
+      - HiAnime_Unsigned.ipa
