@@ -1,6 +1,6 @@
 workflows:
-  build-hianime-stable-cinema:
-    name: Build HiAnime (Stable Cinema)
+  build-hianime-stable-fix:
+    name: Build HiAnime (Stable Fix)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
@@ -17,7 +17,6 @@ workflows:
       - name: Download & Configure Wrapper
         script: |
           echo "🧹 Clearing directory..."
-          # FIX: These must be separate commands
           rm -rf .git
           rm -rf *
           
@@ -43,7 +42,8 @@ workflows:
           echo "🎬 FIX: Stable Cinema Engine..."
           VC_FILE=$(find . -name "ViewController.swift" -type f | head -n 1)
           
-          cat > "$VC_FILE" <<EOF
+          # We use 'EOF' (quoted) to prevent the shell from breaking Swift syntax like \(error)
+          cat > "$VC_FILE" <<'EOF'
           import UIKit
           import WebKit
           import AVFoundation
@@ -85,15 +85,16 @@ workflows:
                   ])
                   
                   // 5. LOAD URL
-                  if let url = URL(string: "$WEBVIEW_URL") {
-                      // Using iPad User Agent for better video player support
+                  // We use a placeholder string "REPLACE_ME_URL" which we will swap out later
+                  if let url = URL(string: "REPLACE_ME_URL") {
                       var request = URLRequest(url: url)
+                      // iPad User Agent for Desktop-class video player
                       webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
                       webView.load(request)
                   }
               }
               
-              // 6. SAFE AUDIO ACTIVATION (Moved to viewDidAppear to prevent crash)
+              // 6. SAFE AUDIO ACTIVATION
               override func viewDidAppear(_ animated: Bool) {
                   super.viewDidAppear(animated)
                   DispatchQueue.global(qos: .background).async {
@@ -111,6 +112,9 @@ workflows:
               }
           }
           EOF
+          
+          # Inject the URL now (Safe substitution)
+          sed -i "" "s|REPLACE_ME_URL|$WEBVIEW_URL|g" "$VC_FILE"
 
           echo "🎨 FIX: Creating Icon 'Landing Pad'..."
           mkdir -p WebViewApp/Assets.xcassets/AppIcon.appiconset
@@ -138,6 +142,8 @@ workflows:
         script: |
           PROJECT_NAME=$(find . -name "*.xcodeproj" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$PROJECT_NAME" .xcodeproj)
+          
+          # FIX: We explicitly set the Deployment Target to 15.0 to avoid the "iOS 11.3" error
           xcodebuild build \
             -project "$PROJECT_NAME" \
             -scheme "$SCHEME_NAME" \
@@ -145,6 +151,7 @@ workflows:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
+            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
