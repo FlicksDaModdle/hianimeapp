@@ -1,11 +1,14 @@
 workflows:
-  build-unsigned-ipa:
-    name: Build Unsigned IPA
+  build-hianime-webview:
+    name: Build HiAnime Webview (Clean Rewrite)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
       vars:
-        XCODE_SCHEME: "HiAnime"
+        # 1. Enter the URL you want the app to open
+        WEBVIEW_URL: "https://hianime.to/home" 
+        # 2. Enter the name of the app (Appears on home screen)
+        APP_NAME: "HiAnime"
     triggering:
       events:
         - push
@@ -13,52 +16,35 @@ workflows:
         - pattern: 'main'
         - pattern: 'master'
     scripts:
-      - name: Surgical Fix of Podfile & Dependencies
+      - name: Download & Configure Open Source Wrapper
         script: |
-          echo "🛠️ Starting Surgical Fixes..."
-
-          # FIX 1: Remove the private "gonative-specs" source link
-          sed -i "" "/gonative-specs/d" Podfile || sed -i "/gonative-specs/d" Podfile
+          # 1. Delete the "Locked" Median code from the build folder
+          rm -rf * # 2. Clone a free, open-source WebView template
+          git clone https://github.com/kemalenver/WebViewApp.git .
           
-          # FIX 2: Convert any SSH links to HTTPS
-          sed -i "" "s/git@github.com:/https:\/\/github.com\//g" Podfile || sed -i "s/git@github.com:/https:\/\/github.com\//g" Podfile
+          # 3. Inject the HiAnime URL into the source code
+          # This specific repo stores the URL in 'Constants.swift' or 'ViewController.swift'
+          # We use sed to replace the default URL with yours
+          sed -i "" "s|https://www.google.com|$WEBVIEW_URL|g" WebViewApp/ViewController.swift || echo "URL Replace tried"
           
-          # FIX 3: DELETE 'MedianIcons' dependency
-          sed -i "" "/MedianIcons/d" Podfile || sed -i "/MedianIcons/d" Podfile
-
-          # FIX 4: DELETE 'GoNativeCore' dependency (The private engine)
-          sed -i "" "/GoNativeCore/d" Podfile || sed -i "/GoNativeCore/d" Podfile
-
-          # FIX 5: INJECT 'GoNativeIOS' dependency (The public engine)
-          # We add this to the end of the Podfile to force it to use the open source version
-          echo "pod 'GoNativeIOS', :git => 'https://github.com/gonativeio/gonative-ios.git'" >> Podfile
-
-          # FIX 6: Rename imports in Swift/Obj-C files
-          # The app will try to 'import GoNativeCore', we switch it to 'import GoNativeIOS'
-          find . -name "*.swift" -type f -exec sed -i "" "s/import GoNativeCore/import GoNativeIOS/g" {} +
-          find . -name "*.m" -type f -exec sed -i "" "s/#import <GoNativeCore/#import <GoNativeIOS/g" {} +
-          
-          # FIX 7: Remove 'import MedianIcons' to prevent crashes
-          find . -name "*.swift" -type f -exec sed -i "" "/import MedianIcons/d" {} +
-          
-          echo "✅ Fixes applied. Installing Pods..."
-
-          # Install the pods
-          pod install --repo-update
+          # 4. (Optional) Rename the App Bundle
+          # This is a bit hacky but updates the display name in Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" WebViewApp/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" WebViewApp/Info.plist
 
       - name: Build Unsigned .app
         script: |
+          # Build the new Open Source project
           xcodebuild build \
-            -workspace "HiAnime.xcworkspace" \
-            -scheme "$XCODE_SCHEME" \
+            -project "WebViewApp.xcodeproj" \
+            -scheme "WebViewApp" \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Package .app into .ipa
         script: |
