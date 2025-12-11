@@ -1,6 +1,6 @@
 workflows:
-  build-hianime-icon-ready:
-    name: Build HiAnime (Icon Ready)
+  build-hianime-performance:
+    name: Build HiAnime (High Performance)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
@@ -14,7 +14,7 @@ workflows:
         - pattern: 'main'
         - pattern: 'master'
     scripts:
-      - name: Download & Configure Open Source Wrapper
+      - name: Download & Configure Wrapper
         script: |
           echo "🧹 Clearing directory..."
           rm -rf * rm -rf .git
@@ -24,34 +24,89 @@ workflows:
           mv temp_clone/* .
           rm -rf temp_clone
 
-          echo "🔗 Injecting URL..."
-          find . -name "*.swift" -type f -exec sed -i "" "s|https://apple.com|$WEBVIEW_URL|g" {} +
-          find . -name "*.swift" -type f -exec sed -i "" "s|https://www.google.com|$WEBVIEW_URL|g" {} +
-
           echo "📱 Renaming App..."
           INFO_PLIST=$(find . -name "Info.plist" -maxdepth 4 | head -n 1)
           if [ -n "$INFO_PLIST" ]; then
             /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_NAME" "$INFO_PLIST"
             /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" "$INFO_PLIST"
+            
+            # CRITICAL: Allow HTTP loads (Arbitrary Loads) so video servers aren't blocked
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$INFO_PLIST" 2>/dev/null
           fi
 
-          echo "📐 FIX: Full Screen..."
+          echo "🚀 FIX: The High-Performance Engine..."
+          # We locate the ViewController file
           VC_FILE=$(find . -name "ViewController.swift" -type f | head -n 1)
-          if [ -n "$VC_FILE" ]; then
-             sed -i "" '/super.viewDidLoad()/a\
-             webView.scrollView.contentInsetAdjustmentBehavior = .never\
-             ' "$VC_FILE"
-          fi
+          
+          # We overwrite it with the LAG-FREE, VIDEO-ENABLED code
+          cat > "$VC_FILE" <<EOF
+          import UIKit
+          import WebKit
+
+          class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
+              
+              var webView: WKWebView!
+
+              override func viewDidLoad() {
+                  super.viewDidLoad()
+                  
+                  // 1. HIGH PERFORMANCE CONFIGURATION
+                  let webConfiguration = WKWebViewConfiguration()
+                  
+                  // Fix Video Playback: Allow inline video (no fullscreen force) and auto-play
+                  webConfiguration.allowsInlineMediaPlayback = true
+                  webConfiguration.mediaTypesRequiringUserActionForPlayback = []
+                  
+                  // Fix Picture-in-Picture
+                  webConfiguration.allowsPictureInPictureMediaPlayback = true
+                  
+                  // Fix Local Storage/Cookies (Helps with login state and player settings)
+                  webConfiguration.processPool = WKProcessPool()
+                  webConfiguration.websiteDataStore = WKWebsiteDataStore.default()
+
+                  // 2. Initialize WebView
+                  webView = WKWebView(frame: .zero, configuration: webConfiguration)
+                  webView.navigationDelegate = self
+                  webView.uiDelegate = self
+                  
+                  // 3. REMOVE LAG: Disable 'Drag' interaction which conflicts with scroll on some sites
+                  webView.scrollView.bounces = false 
+                  webView.scrollView.contentInsetAdjustmentBehavior = .never
+                  
+                  // 4. Add to view
+                  view.addSubview(webView)
+                  webView.translatesAutoresizingMaskIntoConstraints = false
+                  
+                  // 5. FULL SCREEN CONSTRAINTS
+                  NSLayoutConstraint.activate([
+                      webView.topAnchor.constraint(equalTo: view.topAnchor),
+                      webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                      webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                      webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+                  ])
+                  
+                  // 6. Load the URL with a Custom User Agent
+                  // (Tricks the site into thinking it's a real Safari browser, not a 'webview')
+                  if let url = URL(string: "$WEBVIEW_URL") {
+                      var request = URLRequest(url: url)
+                      webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+                      webView.load(request)
+                  }
+              }
+              
+              // Light status bar for dark anime backgrounds
+              override var preferredStatusBarStyle: UIStatusBarStyle {
+                  return .lightContent
+              }
+          }
+          EOF
+          
+          echo "✅ High-Performance Engine Injected."
 
           echo "🎨 FIX: Creating Icon 'Landing Pad'..."
-          # 1. Ensure the Assets folder exists
           mkdir -p WebViewApp/Assets.xcassets/AppIcon.appiconset
-          
-          # 2. Create a generic placeholder image (using a 1x1 pixel generic image for structure)
-          # We just need a file to exist so the signing app can replace it.
           curl -L -o WebViewApp/Assets.xcassets/AppIcon.appiconset/1024.png "https://via.placeholder.com/1024.png/FFFFFF/FFFFFF"
 
-          # 3. Create the configuration file that links the image to iOS
           cat > WebViewApp/Assets.xcassets/AppIcon.appiconset/Contents.json <<EOF
           {
             "images" : [
@@ -65,12 +120,9 @@ workflows:
           }
           EOF
           
-          # 4. CRITICAL: Tell the app "Hey, look in the Assets folder for the icon"
-          # Without this line in Info.plist, the app ignores the images we just downloaded.
           if [ -n "$INFO_PLIST" ]; then
              /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$INFO_PLIST" 2>/dev/null
              /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$INFO_PLIST"
-             echo "✅ Info.plist updated to look for AppIcon"
           fi
 
       - name: Build Unsigned .app
@@ -92,7 +144,7 @@ workflows:
         script: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/
-          zip -r "HiAnime_IconReady.ipa" Payload
+          zip -r "HiAnime_HighPerf.ipa" Payload
 
     artifacts:
-      - HiAnime_IconReady.ipa
+      - HiAnime_HighPerf.ipa
