@@ -1,6 +1,6 @@
 workflows:
   build-hianime-webview:
-    name: Build HiAnime Webview (Final Fix)
+    name: Build HiAnime Full Screen
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
@@ -27,6 +27,8 @@ workflows:
           echo "🔗 Injecting URL..."
           # Replace the default URL with yours
           find . -name "*.swift" -type f -exec sed -i "" "s|https://apple.com|$WEBVIEW_URL|g" {} +
+          # Just in case, try google.com too
+          find . -name "*.swift" -type f -exec sed -i "" "s|https://www.google.com|$WEBVIEW_URL|g" {} +
 
           echo "📱 Renaming App..."
           # Find the Info.plist file automatically
@@ -37,13 +39,29 @@ workflows:
             
             # LOGIC: Try to SET the name. If it fails (because it doesn't exist), ADD it instead.
             /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_NAME" "$INFO_PLIST"
-            
-            # Same logic for Display Name
             /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" "$INFO_PLIST"
             
             echo "✅ App name updated to $APP_NAME"
           else
             echo "⚠️ Info.plist not found, skipping rename."
+          fi
+
+          echo "📐 FIX: Make WebView Full Screen..."
+          # 1. Find the main ViewController file
+          VC_FILE=$(find . -name "ViewController.swift" -type f | head -n 1)
+          
+          if [ -n "$VC_FILE" ]; then
+             echo "Found ViewController at $VC_FILE, injecting full-screen code..."
+             
+             # This injects the line 'webView.scrollView.contentInsetAdjustmentBehavior = .never' 
+             # right after 'super.viewDidLoad()' to ignore safe area insets.
+             sed -i "" '/super.viewDidLoad()/a\
+             webView.scrollView.contentInsetAdjustmentBehavior = .never\
+             ' "$VC_FILE"
+             
+             echo "✅ Full screen code injected."
+          else
+             echo "⚠️ Could not find ViewController.swift to inject full-screen code."
           fi
 
       - name: Build Unsigned .app
