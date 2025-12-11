@@ -1,6 +1,6 @@
 workflows:
   build-hianime-webview:
-    name: Build HiAnime Webview (Clean Rewrite)
+    name: Build HiAnime Webview (Fixed)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
@@ -17,34 +17,35 @@ workflows:
       - name: Download & Configure Open Source Wrapper
         script: |
           echo "🧹 Clearing current directory..."
-          # FIX: Explicitly remove the hidden .git folder and all files
-          rm -rf .git
-          rm -rf *
-
+          rm -rf * rm -rf .git
+          
           echo "⬇️ Cloning Open Source WebView..."
-          git clone https://github.com/kemalenver/WebViewApp.git .
+          # Clone into a temp folder first to avoid "Directory not empty" errors
+          git clone https://github.com/kemalenver/WebViewApp.git temp_clone
+          
+          # Move files to current directory and cleanup
+          mv temp_clone/* .
+          rm -rf temp_clone
+
+          echo "📂 Verifying Files..."
+          ls -la # debug: showing files to ensure xcodeproj is here
 
           echo "🔗 Injecting URL..."
-          # We use 'find' to locate the ViewController file wherever it is
-          # This makes the script "crash-proof" even if the folder name changes
+          # Inject your specific URL
           find . -name "ViewController.swift" -type f -exec sed -i "" "s|https://www.google.com|$WEBVIEW_URL|g" {} +
 
           echo "📱 Renaming App..."
-          # We use 'find' to locate the Info.plist file
-          INFO_PLIST=$(find . -name "Info.plist" -maxdepth 3 | head -n 1)
-          
-          if [ -n "$INFO_PLIST" ]; then
-            /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST"
-          else
-            echo "⚠️ Warning: Info.plist not found. App name might be default."
-          fi
+          # Update Info.plist with your app name
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" WebViewApp/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" WebViewApp/Info.plist
 
       - name: Build Unsigned .app
         script: |
-          # Automatically find the project file since we just cloned it
-          PROJECT_NAME=$(find . -name "*.xcodeproj" -maxdepth 1 | head -n 1)
-          SCHEME_NAME=$(basename "$PROJECT_NAME" .xcodeproj)
+          # We hardcode the names because we know exactly what we cloned
+          PROJECT_NAME="WebViewApp.xcodeproj"
+          SCHEME_NAME="WebViewApp"
+
+          echo "🔨 Building $PROJECT_NAME with scheme $SCHEME_NAME..."
 
           xcodebuild build \
             -project "$PROJECT_NAME" \
