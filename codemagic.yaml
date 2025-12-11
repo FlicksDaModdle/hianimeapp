@@ -1,6 +1,6 @@
 workflows:
-  build-hianime-performance:
-    name: Build HiAnime (High Performance)
+  build-hianime-stable-cinema:
+    name: Build HiAnime (Stable Cinema)
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
@@ -30,18 +30,21 @@ workflows:
             /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_NAME" "$INFO_PLIST"
             /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$INFO_PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" "$INFO_PLIST"
             
-            # CRITICAL: Allow HTTP loads (Arbitrary Loads) so video servers aren't blocked
+            # UNLOCK: Allow Arbitrary Loads (Vital for video servers)
             /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$INFO_PLIST" 2>/dev/null
+            
+            # UNLOCK: Background Audio
+            /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$INFO_PLIST" 2>/dev/null
+            /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" "$INFO_PLIST" 2>/dev/null
           fi
 
-          echo "🚀 FIX: The High-Performance Engine..."
-          # We locate the ViewController file
+          echo "🎬 FIX: Stable Cinema Engine..."
           VC_FILE=$(find . -name "ViewController.swift" -type f | head -n 1)
           
-          # We overwrite it with the LAG-FREE, VIDEO-ENABLED code
           cat > "$VC_FILE" <<EOF
           import UIKit
           import WebKit
+          import AVFoundation
 
           class ViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
               
@@ -50,58 +53,62 @@ workflows:
               override func viewDidLoad() {
                   super.viewDidLoad()
                   
-                  // 1. HIGH PERFORMANCE CONFIGURATION
+                  // 1. CONFIGURATION
                   let webConfiguration = WKWebViewConfiguration()
-                  
-                  // Fix Video Playback: Allow inline video (no fullscreen force) and auto-play
                   webConfiguration.allowsInlineMediaPlayback = true
                   webConfiguration.mediaTypesRequiringUserActionForPlayback = []
-                  
-                  // Fix Picture-in-Picture
                   webConfiguration.allowsPictureInPictureMediaPlayback = true
                   
-                  // Fix Local Storage/Cookies (Helps with login state and player settings)
-                  webConfiguration.processPool = WKProcessPool()
-                  webConfiguration.websiteDataStore = WKWebsiteDataStore.default()
-
-                  // 2. Initialize WebView
+                  // 2. INITIALIZE
                   webView = WKWebView(frame: .zero, configuration: webConfiguration)
                   webView.navigationDelegate = self
                   webView.uiDelegate = self
                   
-                  // 3. REMOVE LAG: Disable 'Drag' interaction which conflicts with scroll on some sites
-                  webView.scrollView.bounces = false 
+                  // 3. UI TWEAKS (No Bounce, Dark Mode)
+                  webView.scrollView.bounces = false
                   webView.scrollView.contentInsetAdjustmentBehavior = .never
+                  webView.backgroundColor = .black
+                  webView.isOpaque = false
                   
-                  // 4. Add to view
                   view.addSubview(webView)
+                  view.backgroundColor = .black
                   webView.translatesAutoresizingMaskIntoConstraints = false
                   
-                  // 5. FULL SCREEN CONSTRAINTS
+                  // 4. CONSTRAINTS (Pinned to edges)
                   NSLayoutConstraint.activate([
-                      webView.topAnchor.constraint(equalTo: view.topAnchor),
-                      webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
                       webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                      webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+                      webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                      webView.topAnchor.constraint(equalTo: view.topAnchor),
+                      webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
                   ])
                   
-                  // 6. Load the URL with a Custom User Agent
-                  // (Tricks the site into thinking it's a real Safari browser, not a 'webview')
+                  // 5. LOAD URL
                   if let url = URL(string: "$WEBVIEW_URL") {
+                      // Using iPad User Agent for better video player support
                       var request = URLRequest(url: url)
-                      webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+                      webView.customUserAgent = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
                       webView.load(request)
                   }
               }
               
-              // Light status bar for dark anime backgrounds
+              // 6. SAFE AUDIO ACTIVATION (Moved to viewDidAppear to prevent crash)
+              override func viewDidAppear(_ animated: Bool) {
+                  super.viewDidAppear(animated)
+                  DispatchQueue.global(qos: .background).async {
+                      do {
+                          try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+                          try AVAudioSession.sharedInstance().setActive(true)
+                      } catch {
+                          print("Audio Session Failed silently: \(error)")
+                      }
+                  }
+              }
+              
               override var preferredStatusBarStyle: UIStatusBarStyle {
                   return .lightContent
               }
           }
           EOF
-          
-          echo "✅ High-Performance Engine Injected."
 
           echo "🎨 FIX: Creating Icon 'Landing Pad'..."
           mkdir -p WebViewApp/Assets.xcassets/AppIcon.appiconset
@@ -144,7 +151,7 @@ workflows:
         script: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/
-          zip -r "HiAnime_HighPerf.ipa" Payload
+          zip -r "HiAnime_Stable.ipa" Payload
 
     artifacts:
-      - HiAnime_HighPerf.ipa
+      - HiAnime_Stable.ipa
