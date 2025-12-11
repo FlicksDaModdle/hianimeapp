@@ -13,20 +13,28 @@ workflows:
         - pattern: 'main'
         - pattern: 'master'
     scripts:
-      - name: Fix Podfile & Install Dependencies
+      - name: Fix Podfile & Code Dependencies
         script: |
-          # FIX 1: Remove the private "gonative-specs" source that causes the error
+          # FIX 1: Remove the private "gonative-specs" source
           sed -i "" "/gonative-specs/d" Podfile || sed -i "/gonative-specs/d" Podfile
           
-          # FIX 2: Convert any SSH links (git@github.com) to HTTPS to avoid permission errors
+          # FIX 2: Convert SSH links to HTTPS
           sed -i "" "s/git@github.com:/https:\/\/github.com\//g" Podfile || sed -i "s/git@github.com:/https:\/\/github.com\//g" Podfile
+          
+          # FIX 4: Remove the private 'MedianIcons' pod requirement
+          # This deletes the line "pod 'MedianIcons'" from the Podfile
+          sed -i "" "/MedianIcons/d" Podfile || sed -i "/MedianIcons/d" Podfile
 
-          # Install the pods using the public repo
+          # FIX 5: Remove "import MedianIcons" from all Swift files
+          # This prevents the compiler from crashing because the pod is missing
+          find . -name "*.swift" -type f -exec sed -i "" "/import MedianIcons/d" {} +
+
+          # Install the remaining valid pods
           pod install --repo-update
 
       - name: Build Unsigned .app
         script: |
-          # FIX 3: Disable User Script Sandboxing to prevent "rsync" permission errors in Xcode 15+
+          # FIX 3: Disable User Script Sandboxing
           xcodebuild build \
             -workspace "HiAnime.xcworkspace" \
             -scheme "$XCODE_SCHEME" \
@@ -42,9 +50,7 @@ workflows:
       - name: Package .app into .ipa
         script: |
           mkdir -p Payload
-          # Copy the compiled app into the Payload folder
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/
-          # Zip it up
           zip -r "HiAnime_Unsigned.ipa" Payload
 
     artifacts:
